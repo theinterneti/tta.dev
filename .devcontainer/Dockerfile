@@ -24,7 +24,7 @@
     FROM python:3.11-slim as final
     
     # Copy application code (after setting workdir)
-    COPY ../app
+    COPY ../ /app
     
     # Copy dependencies from builder stage
     COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
@@ -45,7 +45,7 @@
     # If you want to run the application as a non-root user, uncomment and adjust the following:
     RUN useradd -m appuser && usermod -aG sudo appuser
     USER appuser
-    
+    ENV PATH=$PATH:C:\Users\thein\AppData\Roaming\Python\Python313\Scripts
     # --- Health Check (Optional but Recommended for Production) ---
     # Uncomment and adjust the command to suit your application's health check endpoint or method.
     # HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD ["python", "/app/src/healthcheck.py"]
