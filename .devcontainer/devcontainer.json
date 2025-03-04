@@ -1,25 +1,39 @@
 {
-    "name": "Python 3 AI Chat App",
-    "build": {
-      "dockerfile": "Dockerfile"
-    },
-    "forwardPorts": [8501, 1234, 7687],
-    "postCreateCommand": "pip install -r requirements.txt && git submodule update --init --recursive",
-    "customizations": {
-      "vscode": {
-        "settings": {
-          "terminal.integrated.shell.windows": "C:\\Windows\\System32\\wsl.exe", //Only if using WSL
-          "terminal.integrated.shell.linux": "/bin/bash"
-        },
-        "extensions": [
-          "ms-python.python",
-          "ms-python.vscode-pylance",
-          "ms-azuretools.vscode-docker",
-          "ms-vscode-remote.remote-containers",
-          "ms-vscode.neo4j"
-        ]
-      }
-    },
-    "workspaceFolder": "/app",
-    "remoteUser": "appuser"
+  "name": "TTA Development Container",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "forwardPorts": [8501, 1234, 7687],
+  "postCreateCommand": "git submodule update --init --recursive",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": false,
+        "python.linting.ruffEnabled": true,
+        "python.formatting.provider": "black",
+        "editor.formatOnSave": true,
+        "files.trimTrailingWhitespace": true,
+        "files.insertFinalNewline": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports.ruff": "always"
+        }
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-azuretools.vscode-docker",
+        "ms-vscode-remote.remote-containers",
+        "ms-vscode.neo4j",
+        "charliermarsh.ruff"
+      ]
+    }
+  },
+  "workspaceFolder": "/app",
+  "remoteUser": "appuser",
+  "runArgs": [  
+     "--env-file", ".env"
+   ]
 }

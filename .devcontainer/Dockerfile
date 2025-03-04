@@ -1,82 +1,105 @@
-# --- Base Image ---
-# Use a specific Python version. 'slim' variant is smaller, good for production.
-FROM python:3.11-slim as base
+# --- Multi-Stage Build: Builder Stage (for Dependencies) ---
+    FROM python:3.11-slim as builder
 
-# Set working directory inside the container.  All subsequent commands are relative to this.
-WORKDIR /app
+    # Set the working directory in the container
+    WORKDIR /app/build  # Dedicated workdir for builder stage
+   
+    # Copy only requirements file for caching - IMPORTANT for build speed!
+    COPY ../requirements.txt .
+    
+    # --- System Dependencies---
+    # Example of installing system packages (uncomment and adjust if needed):
+    RUN apt-get update && apt-get install -y python3-pip
+    RUN apt-get update && apt-get install -y git
 
-# --- Install System Dependencies (if needed) ---
-# If your Python libraries or application requires system-level dependencies
-# (like specific libraries, tools, etc.), install them here using 'apt-get'.
-# For example, if you needed 'libpq-dev' for psycopg2 (PostgreSQL):
-# RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev
-#
-# For this AI project, we might not need any system dependencies initially.
-# If you find errors later related to missing system libraries, you can add them here.
-# For now, we'll skip this section.
-#
-# Example of installing system packages (uncomment if needed):
-# RUN apt-get update && apt-get install -y --no-install-recommends some-system-package another-package
-
-
-# --- Copy Requirements File and Install Python Dependencies ---
-# Copy only the requirements.txt file first to leverage Docker's caching.
-# This means if only application code changes, Docker can reuse the cached dependency installation layer,
-# making builds much faster.
-COPY requirements.txt /app/
-
-# Install Python dependencies from requirements.txt.
-# --no-cache-dir: Prevents pip from caching downloaded packages, reduces image size.
-# -r requirements.txt: Tells pip to install packages listed in requirements.txt.
-RUN pip install --no-cache-dir -r requirements.txt
-
-
-# --- Copy Application Code ---
-# Copy the rest of your application code into the container.
-# IMPORTANT: Make sure you have a '.dockerignore' file to exclude unnecessary files
-# (like .git folders, __pycache__, etc.) to keep the image size small and build fast.
-COPY . /app/
-
-
-# --- Expose Ports ---
-# Expose the ports that your application and services will use.
-# 8501:  Likely for Streamlit (if you are using it)
-# 1234:  Default port for LM Studio
-# 7687:  Default Bolt port for Neo4j (though Neo4j should ideally be in a separate container)
-EXPOSE 8501 1234 7687
-
-
-# --- Create a Non-Root User for Security ---
-# Create a new user named 'appuser' with a home directory.
-RUN useradd -m appuser
-
-# Switch to the 'appuser' user for running the application.
-# Running as a non-root user is a security best practice.
-USER appuser
-
-
-# --- Command to Run the Application ---
-# Define the command to execute when the container starts.
-# Assumes your main Python script is in 'src/main.py'.
-# Adjust the path if your main script is located elsewhere.
-CMD ["python", "src/main.py"]
-
-# --- IMPORTANT REMINDERS ---
-# 1. ENVIRONMENT VARIABLES:
-#    - DO NOT hardcode API keys, passwords, or sensitive configuration directly in this Dockerfile.
-#    - Pass environment variables at runtime using Docker Compose, 'docker run -e', or your container orchestration system.
-#    - Use a '.env' file (and load it in your Python code with 'python-dotenv' as you are already doing) for local development.
-#
-# 2. .dockerignore FILE:
-#    - Create a '.dockerignore' file in the same directory as your Dockerfile.
-#    - Add patterns for files and directories you don't want to include in the Docker image
-#      (e.g., .git/, __pycache__/, *.pyc, .env, node_modules/, etc.).
-#    - This significantly reduces image size and build time.
-#
-# 3. PRODUCTION vs. DEVELOPMENT:
-#    - This Dockerfile is suitable for both development and production.
-#    - For development, you'll typically use it with VS Code Dev Containers, which mounts your source code.
-#    - For production, you'll build the image and deploy it.
-#
-# 4. ADJUST CMD:
-#    - Ensure the 'CMD' instruction correctly points to your main Python application file.
+    # Install Python dependencies in builder stage
+    RUN echo "Running pip install in builder stage..."
+    RUN pip install --no-cache-dir -r requirements.txt
+    RUN echo "pip install finished in builder stage."
+    RUN pip list # Let's see what's installed in the builder stage
+    
+    # --- Final Image: Runtime Stage ---
+    FROM python:3.11-slim as final
+    
+    # Copy application code (after setting workdir)
+    COPY . /app
+    
+    # Copy dependencies from builder stage
+    COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+    COPY --from=builder /usr/local/bin /usr/local/bin
+    
+    # --- System Dependencies (Example - Uncomment and adjust if needed) ---
+    # Example of installing system packages (uncomment and adjust if needed):
+    # RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev
+    
+    # --- Expose Ports ---
+    # Expose the ports that your application and services will use.
+    # 8501:  Likely for Streamlit (if you are using it)
+    # 1234:  Default port for LM Studio
+    # 7687:  Default Bolt port for Neo4j (though Neo4j should ideally be in a separate container)
+    EXPOSE 8501 1234 7687
+    
+    # --- Create a Non-Root User for Security ---    
+    # If you want to run the application as a non-root user, uncomment and adjust the following:
+    #RUN useradd -m appuser
+    #USER appuser
+    
+    # --- Health Check (Optional but Recommended for Production) ---
+    # Uncomment and adjust the command to suit your application's health check endpoint or method.
+    # HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD ["python", "/app/src/healthcheck.py"]
+    # Example healthcheck.py (you would need to create this):
+    # ```python
+    # import sys, requests
+    # try:
+    #     response = requests.get("http://localhost:8501/healthz") # Example Streamlit health endpoint
+    #     response.raise_for_status()
+    #     print("Service is healthy")
+    #     sys.exit(0)
+    # except requests.exceptions.RequestException as e:
+    #     print(f"Service is unhealthy: {e}")
+    #     sys.exit(1)
+    # ```
+    
+    
+    # --- Command to Run the Application ---
+    # Define the command to execute when the container starts.
+    # Adjust the path if your main script is located elsewhere.
+    CMD ["python", "src/main.py"]
+    
+    # --- IMPORTANT REMINDERS ---
+    #
+    # 1.  .dockerignore FILE (CRITICAL):
+    #     - **Ensure you have a `.dockerignore` file** in the same directory as this Dockerfile.
+    #     - This file is **essential** to exclude unnecessary files and directories from your Docker image.
+    #     - **Example `.dockerignore` contents:**
+    #       ```
+    #       .git
+    #       __pycache__
+    #       *.pyc
+    #       .env
+    #       node_modules/
+    #       data/ # Example: exclude your data directory if it shouldn't be in the image
+    #       # Add any other files or directories not needed in the production image
+    #       ```
+    #     - **Without a `.dockerignore`, your image will be unnecessarily large and builds slow.**
+    #
+    # 2.  ENVIRONMENT VARIABLES:
+    #     - **DO NOT hardcode API keys, passwords, or sensitive configuration in the Dockerfile.**
+    #     - Pass environment variables at runtime using Docker Compose (`docker-compose.yml`),
+    #       `docker run -e`, or your container orchestration system (e.g., Kubernetes).
+    #     - Use a `.env` file (and load it in your Python code with `python-dotenv`) for local development ONLY.
+    #
+    # 3.  PRODUCTION vs. DEVELOPMENT:
+    #     - This Dockerfile is optimized for **production** by using a multi-stage build and a non-root user.
+    #     - For **development** with VS Code Dev Containers, Docker might mount your source code directly,
+    #       making rebuilds faster during development. However, using this Dockerfile for both ensures consistency.
+    #
+    # 4.  ADJUST `CMD` and `HEALTHCHECK`:
+    #     - **Verify that `CMD` correctly points to your main Python application file (`src/main.py` is assumed).**
+    #     - **If you implement a health check endpoint, uncomment and adjust the `HEALTHCHECK` instruction.**
+    #       Ensure the path in `CMD ["python", "/app/src/healthcheck.py"]` is correct for your health check script.
+    #
+    # 5.  MULTI-STAGE BUILD BENEFITS:
+    #     - **Smaller Final Image:** The final image only contains the runtime dependencies and your application, not build tools.
+    #     - **Improved Security:**  Reduces potential attack surface by excluding build tools from the runtime image.
+    #     - **Faster Builds (for code changes):** Docker can cache the dependency installation layer in the builder stage, speeding up subsequent builds when only application code changes.
