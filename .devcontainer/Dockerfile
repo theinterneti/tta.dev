@@ -6,13 +6,15 @@
    
     # Copy only requirements file for caching - IMPORTANT for build speed!
     COPY ../requirements.txt .
-    
+
     # --- System Dependencies---
+    # Install Python dependencies in builder stage
     # Example of installing system packages (uncomment and adjust if needed):
     RUN apt-get update && apt-get install -y python3-pip
     RUN apt-get update && apt-get install -y git
+    RUN apt-get update && apt-get install -y sudo
+    RUN apt-get update && apt-get install -y curl
 
-    # Install Python dependencies in builder stage
     RUN echo "Running pip install in builder stage..."
     RUN pip install --no-cache-dir -r requirements.txt
     RUN echo "pip install finished in builder stage."
@@ -22,7 +24,7 @@
     FROM python:3.11-slim as final
     
     # Copy application code (after setting workdir)
-    COPY . /app
+    COPY ../app
     
     # Copy dependencies from builder stage
     COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
@@ -41,8 +43,8 @@
     
     # --- Create a Non-Root User for Security ---    
     # If you want to run the application as a non-root user, uncomment and adjust the following:
-    #RUN useradd -m appuser
-    #USER appuser
+    RUN useradd -m appuser && usermod -aG sudo appuser
+    USER appuser
     
     # --- Health Check (Optional but Recommended for Production) ---
     # Uncomment and adjust the command to suit your application's health check endpoint or method.

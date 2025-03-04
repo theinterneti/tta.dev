@@ -4,7 +4,6 @@
     "dockerfile": "Dockerfile"
   },
   "forwardPorts": [8501, 1234, 7687],
-  "postCreateCommand": "git submodule update --init --recursive",
   "customizations": {
     "vscode": {
       "settings": {
